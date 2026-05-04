@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Deutsch Lernen</title>
+<!-- PDF.js — used to render PDF pages as screenshots for image-based exercises -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -111,6 +119,21 @@
   .file-bar .name { font-weight: 700; font-size: 0.95rem; color: #444; }
 
   .empty-state { padding: 50px 20px; text-align: center; color: #999; font-size: 0.95rem; }
+
+  /* PDF page screenshot inside an exercise */
+  .pdf-page-shot {
+    margin: 0 0 18px; text-align: center; background: #fafafa;
+    border: 1px solid #e0e0e0; border-radius: 10px; padding: 8px; overflow: hidden;
+  }
+  .pdf-page-shot img {
+    max-width: 100%; max-height: 380px; display: inline-block;
+    border-radius: 6px; cursor: zoom-in; transition: transform 0.15s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .pdf-page-shot img:hover { transform: scale(1.01); }
+  .pdf-page-shot .label {
+    font-size: 0.75rem; color: #888; margin-top: 6px;
+  }
 
   /* ===========================================================================
      RESPONSIVE BREAKPOINTS
@@ -661,6 +684,42 @@ function setProgress(pct, text) {
   document.getElementById('upload-status-text').textContent = text;
 }
 
+// Holds rendered PDF pages as data URLs (1-indexed: pdfPageImages[pageNumber - 1])
+let pdfPageImages = [];
+
+// Render every page of the PDF to a JPEG data URL using PDF.js
+async function renderPDFPages(arrayBuffer) {
+  if (!window.pdfjsLib) return [];
+  try {
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const out = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page   = await pdf.getPage(i);
+      const vp     = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      out.push(canvas.toDataURL('image/jpeg', 0.85));
+    }
+    return out;
+  } catch (e) {
+    console.warn('PDF.js render failed:', e);
+    return [];
+  }
+}
+
+// Click any page screenshot to open a fullscreen zoom viewer
+function openImageViewer(src) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:2000;display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:20px;';
+  overlay.onclick = () => overlay.remove();
+  const img = document.createElement('img');
+  img.src = src;
+  img.style.cssText = 'max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+}
+
 async function handlePDFFile(file) {
   if (!file || file.type !== 'application/pdf') { alert('Please select a PDF file.'); return; }
   if (!getKey()) { alert('Please enter your Gemini API key first.'); return; }
@@ -672,12 +731,19 @@ async function handlePDFFile(file) {
   document.getElementById('upload-status').style.display     = 'block';
   setProgress(10, 'Reading PDF file...');
 
-  const b64 = await new Promise((res, rej) => {
-    const reader = new FileReader();
-    reader.onload  = () => res(reader.result.split(',')[1]);
-    reader.onerror = rej;
-    reader.readAsDataURL(file);
-  });
+  // Read file as both base64 (for Gemini) and ArrayBuffer (for PDF.js render)
+  const [b64, arrayBuffer] = await Promise.all([
+    new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload  = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    }),
+    file.arrayBuffer()
+  ]);
+
+  // Kick off PDF.js page rendering in parallel with the Gemini call
+  const renderPromise = renderPDFPages(arrayBuffer);
 
   setProgress(30, 'Sending to Gemini for exercise extraction...');
 
@@ -688,13 +754,18 @@ Classify each exercise into one of these 2 types:
 - writing  : student writes/fills in answers (grammar drills, fill-in-the-blank, translation, correction tasks, matching, reading comprehension answered in writing, etc.)
 - speaking : student speaks aloud (dialog practice, role-play, read-aloud, pronunciation tasks)
 
+For EACH exercise also include:
+- pageNumber : the 1-indexed PDF page where the exercise appears (integer)
+- hasImages  : true ONLY if the exercise references visual content (photos, signs, price tags, scenes, charts, illustrations, diagrams) that the student MUST SEE to answer. Set to false for pure text exercises.
+
 Return ONLY a valid JSON object in this exact schema, no markdown fences, no extra text:
 {
-  "writing":   [{ "title":"", "instruction":"", "questions":[{"q":"","a":""}] }],
-  "speaking":  [{ "title":"", "instruction":"", "questions":[{"q":"","hint":""}] }]
+  "writing":   [{ "title":"", "instruction":"", "pageNumber":1, "hasImages":false, "questions":[{"q":"","a":""}] }],
+  "speaking":  [{ "title":"", "instruction":"", "pageNumber":1, "hasImages":false, "questions":[{"q":"","hint":""}] }]
 }
 
 If a category has no exercises, return an empty array. Use empty strings for missing fields.
+Be accurate with pageNumber — it is critical because we render that exact page as a screenshot.
 Extract every exercise you find — be thorough.`;
 
   const url  = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_API_MODEL}:generateContent?key=${getKey()}`;
@@ -720,7 +791,10 @@ Extract every exercise you find — be thorough.`;
     return;
   }
 
-  setProgress(90, 'Rendering exercises...');
+  setProgress(80, 'Rendering PDF page screenshots...');
+  pdfPageImages = await renderPromise;
+
+  setProgress(95, 'Rendering exercises...');
   renderExtracted(extracted, file.name);
   setProgress(100, 'Done!');
   setTimeout(() => { document.getElementById('upload-status').style.display = 'none'; }, 600);
@@ -760,6 +834,18 @@ function renderExtracted(data, filename) {
   document.querySelector(`.tab-btn[onclick*="'writing'"]`).classList.add('active');
 }
 
+// Build a "PDF page screenshot" block for an exercise (only if hasImages and the page is rendered)
+function pageShotHTML(ex) {
+  if (!ex.hasImages || !ex.pageNumber) return '';
+  const idx = ex.pageNumber - 1;
+  const src = pdfPageImages[idx];
+  if (!src) return '';
+  return `<div class="pdf-page-shot">
+    <img src="${src}" alt="PDF page ${ex.pageNumber}" onclick="openImageViewer(this.src)">
+    <div class="label">Page ${ex.pageNumber} from the PDF — click to enlarge</div>
+  </div>`;
+}
+
 // ── Writing ─────────────────────────────────────────────────────────────────
 function renderWritingExercises(exercises) {
   const el = document.getElementById('tab-writing');
@@ -777,6 +863,7 @@ function renderWritingExercises(exercises) {
     return `<div class="exercise-card">
       <h2><span class="badge badge-write">Writing</span>${escHtml(ex.title || 'Exercise')}</h2>
       <div class="subtitle">${escHtml(ex.instruction || '')}</div>
+      ${pageShotHTML(ex)}
       ${rows}
       ${ (ex.questions || []).length ? `<button class="check-btn" data-fb="${exId}" data-prefix="${prefix}" data-qs="${qJSON}" onclick="checkPDFAnswers(this)">Check Answers</button>` : '' }
       <div id="${exId}" class="ai-feedback"></div>
@@ -815,6 +902,7 @@ function renderSpeakingExercises(exercises) {
     return `<div class="exercise-card">
       <h2><span class="badge badge-speak">Speaking</span>${escHtml(ex.title || 'Exercise')}</h2>
       <div class="subtitle">${escHtml(ex.instruction || '')}</div>
+      ${pageShotHTML(ex)}
       ${blocks}
     </div>`;
   }).join('');
