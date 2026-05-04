@@ -1,4 +1,4 @@
-# Deutsch Lernen mit Talha
+# Deutsch Lernen
 
 Interactive German A1 exercise app. Upload any German lecture PDF and Gemini automatically extracts and converts every exercise into an interactive practice session.
 
