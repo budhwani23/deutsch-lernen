@@ -86,8 +86,6 @@
   .badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; font-weight: 600; vertical-align: middle; margin-right: 8px; }
   .badge-write  { background: #d1ecf1; color: #0c5460; }
   .badge-speak  { background: #fce8d5; color: #7d3000; }
-  .badge-listen { background: #e8f5e9; color: #1b5e20; }
-  .badge-read   { background: #fce4ec; color: #880e4f; }
 
   .speak-block { margin-bottom: 20px; padding: 16px; background: #fafafa; border-radius: 10px; border: 1px solid #eee; }
 
@@ -111,18 +109,6 @@
     margin-bottom: 20px; border: 1px solid var(--border); flex-wrap: wrap; gap: 10px;
   }
   .file-bar .name { font-weight: 700; font-size: 0.95rem; color: #444; }
-
-  .listen-link {
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-    background: #f0f8ff; border: 1px solid #bee3f8; border-radius: 8px; margin-bottom: 8px;
-  }
-  .listen-link a { color: var(--blue); word-break: break-all; font-size: 0.9rem; }
-
-  .reading-passage {
-    background: #fffdf0; border-left: 4px solid #f0ad4e; padding: 16px 18px;
-    border-radius: 0 8px 8px 0; font-size: 0.95rem; line-height: 1.8;
-    margin-bottom: 20px; white-space: pre-wrap;
-  }
 
   .empty-state { padding: 50px 20px; text-align: center; color: #999; font-size: 0.95rem; }
 
@@ -202,8 +188,6 @@
     .file-bar { padding: 10px 14px; flex-direction: column; align-items: stretch; }
     .file-bar button { width: 100%; }
 
-    .reading-passage { font-size: 0.9rem; padding: 14px; line-height: 1.7; }
-
     .ai-feedback { padding: 12px; font-size: 0.85rem; }
 
     /* Modal — full-width on small screens with safe padding */
@@ -237,8 +221,6 @@
     .upload-icon { font-size: 2.4rem; }
 
     .speak-question .de { font-size: 1rem; }
-
-    .reading-passage { padding: 12px; font-size: 0.85rem; }
 
     #key-help > div { padding: 18px 14px; }
     #key-help h2 { font-size: 1rem; }
@@ -337,8 +319,6 @@
 <div class="tabs" id="main-tabs" style="display:none">
   <button class="tab-btn active" onclick="switchTab('writing',event)">&#9999;&#65039; Writing <span class="count" id="cnt-writing">0</span></button>
   <button class="tab-btn"        onclick="switchTab('speaking',event)">&#127908; Speaking <span class="count" id="cnt-speaking">0</span></button>
-  <button class="tab-btn"        onclick="switchTab('listening',event)">&#127909; Listening <span class="count" id="cnt-listening">0</span></button>
-  <button class="tab-btn"        onclick="switchTab('reading',event)">&#128214; Reading <span class="count" id="cnt-reading">0</span></button>
 </div>
 
 <main>
@@ -351,7 +331,7 @@
          ondrop="event.preventDefault();this.classList.remove('drag');handlePDFFile(event.dataTransfer.files[0])">
       <div class="upload-icon">&#128196;</div>
       <h3>Drop a PDF here or click to browse</h3>
-      <p>Upload a German lecture PDF and Gemini will automatically extract all Writing, Speaking, Listening &amp; Reading exercises for interactive practice.</p>
+      <p>Upload a German lecture PDF and Gemini will automatically extract all Writing &amp; Speaking exercises for interactive practice.</p>
       <input type="file" id="pdf-file-input" accept=".pdf" onchange="handlePDFFile(this.files[0])">
     </div>
 
@@ -373,8 +353,6 @@
 
     <div id="tab-writing"   class="tab-content active"></div>
     <div id="tab-speaking"  class="tab-content"></div>
-    <div id="tab-listening" class="tab-content"></div>
-    <div id="tab-reading"   class="tab-content"></div>
   </div>
 
 </main>
@@ -706,18 +684,14 @@ async function handlePDFFile(file) {
   const prompt = `You are an expert language exercise extractor.
 
 Analyse this German language learning PDF and extract ALL exercises you find.
-Classify each exercise into one of these 4 types:
-- writing  : student writes/fills in answers (grammar drills, fill-in-the-blank, translation, correction tasks, matching, etc.)
+Classify each exercise into one of these 2 types:
+- writing  : student writes/fills in answers (grammar drills, fill-in-the-blank, translation, correction tasks, matching, reading comprehension answered in writing, etc.)
 - speaking : student speaks aloud (dialog practice, role-play, read-aloud, pronunciation tasks)
-- listening: involves audio/video resources (exercises referencing audio tracks, QR codes, YouTube links, listening comprehension)
-- reading  : student reads a passage and answers questions
 
 Return ONLY a valid JSON object in this exact schema, no markdown fences, no extra text:
 {
   "writing":   [{ "title":"", "instruction":"", "questions":[{"q":"","a":""}] }],
-  "speaking":  [{ "title":"", "instruction":"", "questions":[{"q":"","hint":""}] }],
-  "listening": [{ "title":"", "instruction":"", "links":[], "questions":[{"q":"","a":""}] }],
-  "reading":   [{ "title":"", "instruction":"", "passage":"", "questions":[{"q":"","a":""}] }]
+  "speaking":  [{ "title":"", "instruction":"", "questions":[{"q":"","hint":""}] }]
 }
 
 If a category has no exercises, return an empty array. Use empty strings for missing fields.
@@ -766,17 +740,15 @@ function renderExtracted(data, filename) {
 
   renderWritingExercises(data.writing   || []);
   renderSpeakingExercises(data.speaking || []);
-  renderListeningExercises(data.listening || []);
-  renderReadingExercises(data.reading   || []);
 
-  ['writing','speaking','listening','reading'].forEach(t => {
+  ['writing','speaking'].forEach(t => {
     document.getElementById('cnt-' + t).textContent = (data[t] || []).length;
   });
 
   // Activate first non-empty tab
   document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('active'));
-  for (const t of ['writing','speaking','listening','reading']) {
+  for (const t of ['writing','speaking']) {
     if ((data[t] || []).length > 0) {
       document.getElementById('tab-' + t).classList.add('active');
       document.querySelector(`.tab-btn[onclick*="'${t}'"]`).classList.add('active');
@@ -848,75 +820,12 @@ function renderSpeakingExercises(exercises) {
   }).join('');
 }
 
-// ── Listening ────────────────────────────────────────────────────────────────
-function renderListeningExercises(exercises) {
-  const el = document.getElementById('tab-listening');
-  if (!exercises.length) { el.innerHTML = '<div class="empty-state">No listening exercises found in this PDF.</div>'; return; }
-  el.innerHTML = exercises.map(ex => {
-    const prefix = 'pdfl_' + (++pdfExCounter) + '_';
-    const linksHTML = (ex.links || []).map(url => {
-      const yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([A-Za-z0-9_-]{11})/);
-      if (yt) {
-        return `<div style="margin-bottom:12px;">
-          <iframe width="100%" height="240" style="border-radius:8px;border:none"
-            src="https://www.youtube.com/embed/${yt[1]}" allowfullscreen loading="lazy"></iframe>
-        </div>`;
-      }
-      return `<div class="listen-link">&#127909; <a href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(url)}</a></div>`;
-    }).join('');
-    const rows = (ex.questions || []).map((item, qi) =>
-      `<div class="q-row">
-         <span class="q-label">${escHtml(item.q)}</span>
-         <input class="q-input" type="text" id="${prefix}${qi}" placeholder="your answer...">
-       </div>`
-    ).join('');
-    const exId = prefix + 'fb';
-    const qJSON = JSON.stringify(ex.questions || []).replace(/"/g,'&quot;');
-    return `<div class="exercise-card">
-      <h2><span class="badge badge-listen">Listening</span>${escHtml(ex.title || 'Exercise')}</h2>
-      <div class="subtitle">${escHtml(ex.instruction || '')}</div>
-      ${linksHTML ? `<div style="margin-bottom:16px">${linksHTML}</div>` : ''}
-      ${rows}
-      ${ (ex.questions || []).length ? `<button class="check-btn" data-fb="${exId}" data-prefix="${prefix}" data-qs="${qJSON}" onclick="checkPDFAnswers(this)">Check Answers</button>` : '' }
-      <div id="${exId}" class="ai-feedback"></div>
-    </div>`;
-  }).join('');
-}
-
-// ── Reading ──────────────────────────────────────────────────────────────────
-function renderReadingExercises(exercises) {
-  const el = document.getElementById('tab-reading');
-  if (!exercises.length) { el.innerHTML = '<div class="empty-state">No reading exercises found in this PDF.</div>'; return; }
-  el.innerHTML = exercises.map(ex => {
-    const prefix  = 'pdfr_' + (++pdfExCounter) + '_';
-    const passage = ex.passage || '';
-    const rows = (ex.questions || []).map((item, qi) =>
-      `<div class="q-row">
-         <span class="q-label">${escHtml(item.q)}</span>
-         <input class="q-input" type="text" id="${prefix}${qi}" placeholder="your answer...">
-       </div>`
-    ).join('');
-    const exId = prefix + 'fb';
-    const qJSON = JSON.stringify(ex.questions || []).replace(/"/g,'&quot;');
-    const ctxAttr = `data-passage="${escHtml(passage)}"`;
-    return `<div class="exercise-card">
-      <h2><span class="badge badge-read">Reading</span>${escHtml(ex.title || 'Exercise')}</h2>
-      <div class="subtitle">${escHtml(ex.instruction || '')}</div>
-      ${passage ? `<div class="reading-passage">${escHtml(passage)}</div>` : ''}
-      ${rows}
-      ${ (ex.questions || []).length ? `<button class="check-btn" ${ctxAttr} data-fb="${exId}" data-prefix="${prefix}" data-qs="${qJSON}" onclick="checkPDFAnswers(this)">Check Answers</button>` : '' }
-      <div id="${exId}" class="ai-feedback"></div>
-    </div>`;
-  }).join('');
-}
-
 // ── Universal answer checker for PDF-extracted exercises ────────────────────
 async function checkPDFAnswers(btn) {
   if (!getKey()) { alert('Please enter your Gemini API key first.'); return; }
-  const fbId    = btn.dataset.fb;
-  const prefix  = btn.dataset.prefix;
-  const qs      = JSON.parse(btn.dataset.qs);
-  const passage = btn.dataset.passage || '';
+  const fbId   = btn.dataset.fb;
+  const prefix = btn.dataset.prefix;
+  const qs     = JSON.parse(btn.dataset.qs);
 
   const lines = qs.map((item, i) => {
     const val = document.getElementById(prefix + i)?.value.trim() || '';
@@ -926,9 +835,8 @@ async function checkPDFAnswers(btn) {
   const el = document.getElementById(fbId);
   el.className = 'ai-feedback show'; el.textContent = 'Checking...';
 
-  const ctx = passage ? `\nReading passage for context:\n"${passage.slice(0,800)}${passage.length>800?'...':''}"\n` : '';
   el.textContent = await askGemini(
-    `You are a friendly German A1 teacher. Check each student answer below.${ctx}\n` +
+    `You are a friendly German A1 teacher. Check each student answer below.\n` +
     `Mark ✅ if correct (accept equivalent forms / paraphrases), ❌ + correction if wrong.\n` +
     `If no expected answer is given, use your knowledge of A1 German to judge.\n` +
     `End with one short encouraging line.\n\n${lines}`

@@ -5,11 +5,9 @@ Interactive German A1 exercise app. Upload any German lecture PDF and Gemini aut
 ## Features
 
 - **Upload any German PDF** — Gemini reads it directly and extracts exercises
-- **4 exercise types** auto-classified: Writing, Speaking, Listening, Reading
+- **2 exercise types** auto-classified: Writing, Speaking
 - **Writing**: Type answers, get instant AI feedback
 - **Speaking**: Record your voice, get strict pronunciation evaluation, hear the corrected version spoken back to you by Gemini TTS
-- **Listening**: YouTube links auto-embedded, comprehension questions checked by AI
-- **Reading**: Read passage, answer questions, AI grades comprehension
 - **TTS caching**: Audio cached after first play for instant replay
 
 ## Setup
